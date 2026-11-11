@@ -88,6 +88,19 @@ def test_torch_then_paddle_import_order_works():
     assert out.stdout.strip().endswith("ok"), out.stderr[-500:]
 
 
+def test_user_correction_renormalizes_value():
+    """A corrected area showed the stale normalized value of the misread one ('7332 hectare')."""
+    from conftest import make_block
+
+    from sakshar.models import DocType, ExtractedField, FieldCategory
+    from sakshar.pipeline import verify
+
+    f = ExtractedField(name="area", label="Area", value="0.632 हेक्टेयर", normalized="7332 hectare",
+                       category=FieldCategory.legal, source="user", source_block_ids=["b0"])
+    v = verify.verify_field(f, {"b0": make_block(0, "क्षेत्रफल : (७3३2 हेक्टेयर")}, DocType.land_record_up_khatauni)
+    assert v.normalized == "0.632 hectare" and not v.needs_review
+
+
 def test_area_conventions():
     from sakshar.pipeline.schemas import v_area
 

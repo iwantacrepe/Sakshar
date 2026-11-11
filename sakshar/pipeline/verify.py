@@ -40,6 +40,8 @@ def verify_field(f: ExtractedField, blocks: dict[str, Block], doc_type: DocType)
     cited = [blocks[i] for i in f.source_block_ids if i in blocks]
 
     if f.source == "user":
+        # a person's correction is trusted, but its normalized form must come from the NEW value
+        f.normalized, f.validation_error = spec.validator(f.value) if (spec and f.value) else (None, None)
         f.confidence, f.needs_review, f.review_reasons = 1.0, False, []
         return f
     if not f.value:

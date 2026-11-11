@@ -43,6 +43,11 @@ main { padding: 0 16px 48px; }
 .chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); text-transform: capitalize; }
 .chip.subtle { background: var(--surface-2); color: var(--muted); text-transform: none; }
 .langs-switch { display: flex; gap: 4px; }
+@media (max-width: 600px) {
+  .brand small, .chip.subtle { display: none; }
+  .docname { max-width: 100%; }
+  .langs-switch a { padding: 4px 8px; }
+}
 .langs-switch a { text-decoration: none; padding: 4px 10px; border-radius: 8px; color: var(--muted); font-size: 14px; }
 .langs-switch a.active { background: var(--accent); color: var(--accent-ink); }
 

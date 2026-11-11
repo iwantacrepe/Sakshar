@@ -47,7 +47,79 @@ uvicorn sakshar.main:app --reload       # http://localhost:8000
 
 `GET /healthz` reports the Tesseract path, the installed language packs, whether the LLM is configured, and which voice models are loaded on which device.
 
-## Tests
+## Example run (screenshots)
+
+These screenshots come from one local run in Microsoft Edge, driven with Playwright, on the four bundled sample documents. All screenshots are in [`screenshots/`](screenshots/).
+
+**1. Upload and live progress.** Drop a photo or PDF, then watch each pipeline stage complete. The first stage has already measured and corrected the photo's tilt (+3.5°).
+
+![Upload page](screenshots/01_home_upload.png)
+![Live progress](screenshots/03_live_progress.png)
+
+**2. Reading a Hindi Khatauni.** On the left, the straightened page with every recognised text block outlined; amber outlines mark low-confidence text. On the right, the extracted fields in the Hindi interface. Header chips show the detected document type, language and script, and the OCR route used.
+
+![Hindi workspace](screenshots/04_hindi_workspace_ocr_boxes.png)
+
+**3. Every value points to its source.** Clicking "Khasra number 214" highlights the exact cell on the page that the value was read from.
+
+![Source highlight](screenshots/05_click_field_highlights_source.png)
+
+**4. Uncertain values are flagged, not guessed.** The area value has a smudged digit. Sakshar shows a crop of the original, the reason ("low OCR confidence 48%") and two buttons, *Looks right* and *Correct it*. Once corrected, the value is marked as entered by you and normalized (0.632 hectare).
+
+![Review card](screenshots/06_review_card_with_crop.png)
+![Corrected value](screenshots/07_value_corrected.png)
+
+**5. Ask by voice.** Tap the mic and ask in Hindi, Marathi, Punjabi or English. This question was recorded through the browser's microphone. Whisper transcribed it correctly, including the plot number spoken digit by digit ("दो एक चार").
+
+![Recording](screenshots/08_mic_recording.png)
+![Transcript](screenshots/09_voice_transcript.png)
+
+**6. Marathi, Punjabi and English documents.**
+
+- Marathi 7/12 (Satbara): the area `1.20.00` is read as 1 ha 20 are (1.2 hectare).
+- Punjabi Jamabandi: low-confidence owner and cultivator cells come with crops for review.
+- English application: every field is read, and the Aadhaar number is masked.
+
+![Marathi 7/12](screenshots/10_marathi_712.png)
+![Punjabi Jamabandi](screenshots/11_punjabi_jamabandi.png)
+![English application](screenshots/12_english_application.png)
+
+**7. Dark theme and phone layout.**
+
+![Dark theme](screenshots/13_dark_theme.png)
+<img src="screenshots/15_mobile_details.png" width="320" alt="Phone layout">
+
+## Extraction accuracy: what has been measured
+
+The accuracy numbers come from the four bundled samples: a UP Khatauni, a Maharashtra 7/12, a Punjab Jamabandi and an English application. Each sample is generated with real-world damage:
+
+- a 3.5° tilt;
+- an ink stamp over a date;
+- uneven lighting and noise;
+- one deliberately smudged digit.
+
+Because the documents are generated, the correct value of every field is known exactly. Each extracted field is compared with that value.
+
+| Measure | Result |
+| --- | --- |
+| Values extracted | 44 |
+| Correct | 41 (93% precision) |
+| Incorrect | 3, all caused by the smudged digits, **all 3 flagged for review** |
+| Correct values flagged unnecessarily | 4 (thresholds err on the side of caution) |
+| Values on the page not extracted | 8 of 49 (84% recall). Examples: a date under a stamp, a smudged fee, two Punjabi header fields |
+
+**What these numbers measure.** All of them come from the rule-based extractor alone. In normal use the LLM extractor runs alongside it, and any disagreement between the two is flagged.
+
+**What they don't measure.** Four synthetic documents are a smoke test, not a benchmark. The pipeline has not yet been evaluated on real scanned records or handwritten registers. The next step is a set of real scans, labelled by hand, with field-level accuracy and review-flag precision measured per state.
+
+**How the measurement works:**
+
+- **Ground truth by construction.** `scripts/make_samples.py` writes the documents, so every field value is known.
+- **Field-level comparison** of each extracted value against that ground truth, plus a check that every misread value was flagged.
+- **OCR token checks.** Known tokens such as plot numbers and dates are compared across OCR engines, input images and page-segmentation modes. These checks drove the choice of engine for each script.
+- **49 automated tests** for each stage: deskew, script detection, parsing, checksums, layout, verification gates, grounding and end-to-end flows.
+
+## Tests (49)
 
 ```powershell
 pytest

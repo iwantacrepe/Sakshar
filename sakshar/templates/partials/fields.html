@@ -12,7 +12,8 @@
       <span class="cat">{{ f.category.value }}</span>
     </div>
     <div class="fvalue" lang="{{ doc.lang }}">{{ f.display_value or f.value or '—' }}
-      {% if f.normalized and f.normalized != f.value and f.name != 'aadhaar' %}<span class="norm">→ {{ f.normalized }}</span>{% endif %}
+      {# a normalized form is only shown for values that passed checks; a guess from a misread value would mislead #}
+      {% if f.normalized and f.normalized != f.value and f.name != 'aadhaar' and not f.validation_error and (f.confirmed or not f.needs_review) %}<span class="norm">→ {{ f.normalized }}</span>{% endif %}
     </div>
     <div class="meter" title="Confidence {{ (f.confidence * 100) | round | int }}%"><span style="width: {{ (f.confidence * 100) | round }}%"></span></div>
 
