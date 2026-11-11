@@ -1,0 +1,29 @@
+{% set T = UI[ui_lang] %}
+<article class="explanation" lang="{{ explanation.lang }}">
+  <header>
+    <h2>{{ explanation.title }}</h2>
+    {% if settings().enable_voice and explanation.statements %}
+    <button class="btn small listen" type="button" data-lang="{{ explanation.lang }}"
+            data-text="{{ explanation.summary_local }} {% for s in explanation.statements %}{{ s.text_local }} {% endfor %}">🔊 {{ T.listen }}</button>
+    {% endif %}
+  </header>
+  <p class="summary">{{ explanation.summary_local }}</p>
+  {% if explanation.statements %}
+  <ol class="statements">
+    {% for s in explanation.statements %}
+    <li class="stmt {{ '' if s.grounded else 'unverified' }}" data-cites="{{ s.cited_block_ids | join(' ') }}" tabindex="0"
+        title="{{ s.text_en }}">
+      <span class="text">{{ s.text_local }}</span>
+      {% if not s.grounded %}<span class="tag warn">⚠ {{ T.unverified }}</span>{% endif %}
+      {% if s.cited_block_ids %}<span class="cites">{% for c in s.cited_block_ids %}<span class="cite">{{ c }}</span>{% endfor %}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+  {% if explanation.action_items_local %}
+  <h3>{{ T.next }}</h3>
+  <ul class="actions">
+    {% for a in explanation.action_items_local %}<li>{{ a }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</article>

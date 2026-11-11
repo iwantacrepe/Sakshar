@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="{{ ui_lang | default('en') }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Sakshar{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Sans+Gurmukhi:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+  <!-- vendored (htmx.org@1.9.12) so the app works without internet -->
+  <script src="/static/vendor/htmx-1.9.12.min.js"></script>
+  <script src="/static/vendor/htmx-sse-1.9.12.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="logo" aria-hidden="true">स</span>
+      <span>Sakshar <small>साक्षर · ਸਾਖਰ</small></span>
+    </a>
+    {% block topbar %}{% endblock %}
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

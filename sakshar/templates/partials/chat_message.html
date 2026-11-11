@@ -1,0 +1,11 @@
+{% for t in turns %}
+<div class="turn {{ t.role }}" lang="{{ t.lang }}" {% if t.cited_block_ids %}data-cites="{{ t.cited_block_ids | join(' ') }}"{% endif %}>
+  <div class="bubble">
+    <p>{{ t.text }}</p>
+    {% if t.role == 'assistant' and t.cited_block_ids %}
+    <span class="cites">{% for c in t.cited_block_ids %}<span class="cite">{{ c }}</span>{% endfor %}</span>
+    {% endif %}
+    {% if t.audio %}<audio controls {{ 'autoplay' if autoplay }} src="{{ t.audio }}"></audio>{% endif %}
+  </div>
+</div>
+{% endfor %}

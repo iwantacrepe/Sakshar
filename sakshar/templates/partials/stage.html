@@ -1,0 +1,13 @@
+{% set state = state | default({}) %}
+<div class="progress"><div class="bar" style="width: {{ ((progress | default(0)) * 100) | round }}%"></div></div>
+<ol class="stages">
+  {% for key, label in STAGES %}
+  {% set st = state.get(key, {}) %}
+  <li class="stage {{ st.status | default('pending') }}">
+    <span class="dot" aria-hidden="true"></span>
+    <span class="label">{{ label }}</span>
+    {% if st.detail %}<span class="detail">{{ st.detail }}</span>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}

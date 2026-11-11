@@ -1,0 +1,41 @@
+{% set T = UI[ui_lang] %}
+{% if not doc.fields %}
+<p class="muted">No structured details were found on this document.</p>
+{% endif %}
+<ul class="fields">
+  {% for f in doc.fields %}
+  <li class="field {{ 'review' if f.needs_review and not f.confirmed }} {{ 'confirmed' if f.confirmed }}"
+      data-cites="{{ f.source_block_ids | join(' ') }}">
+    <div class="field-head">
+      <span class="flabel">{{ f.label }}</span>
+      <span class="src src-{{ f.source }}" title="Extracted by">{{ {'regex': 'rule', 'llm': 'AI', 'both': 'rule + AI', 'user': 'you'}[f.source] }}</span>
+      <span class="cat">{{ f.category.value }}</span>
+    </div>
+    <div class="fvalue" lang="{{ doc.lang }}">{{ f.display_value or f.value or '—' }}
+      {% if f.normalized and f.normalized != f.value and f.name != 'aadhaar' %}<span class="norm">→ {{ f.normalized }}</span>{% endif %}
+    </div>
+    <div class="meter" title="Confidence {{ (f.confidence * 100) | round | int }}%"><span style="width: {{ (f.confidence * 100) | round }}%"></span></div>
+
+    {% if f.needs_review and not f.confirmed %}
+    <div class="review-box">
+      {% if f.bbox %}
+      <canvas class="crop" data-page="{{ doc.blocks | selectattr('id', 'in', f.source_block_ids) | map(attribute='page') | first | default(0) }}"
+              data-bbox="{{ f.bbox.x1 }},{{ f.bbox.y1 }},{{ f.bbox.x2 }},{{ f.bbox.y2 }}" width="320" height="64"></canvas>
+      {% endif %}
+      <p class="reason">⚠ {{ T.review }}: {{ f.review_reasons | join('; ') }}</p>
+      <div class="review-actions">
+        <form hx-post="/api/documents/{{ doc.id }}/fields/{{ loop.index0 }}" hx-target="#fields">
+          <input type="hidden" name="action" value="confirm"><input type="hidden" name="lang" value="{{ ui_lang }}">
+          <button class="btn small ok">✓ {{ T.confirm }}</button>
+        </form>
+        <form class="fix" hx-post="/api/documents/{{ doc.id }}/fields/{{ loop.index0 }}" hx-target="#fields">
+          <input type="hidden" name="action" value="correct"><input type="hidden" name="lang" value="{{ ui_lang }}">
+          <input name="value" value="{{ f.value if f.name != 'aadhaar' else '' }}" aria-label="Corrected value" required>
+          <button class="btn small">✎ {{ T.fix }}</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>

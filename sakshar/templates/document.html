@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.filename }} · Sakshar{% endblock %}
+{% block topbar %}
+<div class="docmeta">
+  <span class="docname" title="{{ doc.filename }}">{{ doc.filename }}</span>
+  {% if doc.doc_type %}<span class="chip">{{ doc.doc_type.value | replace('_', ' ') }}</span>{% endif %}
+  {% if doc.lang %}<span class="chip">{{ LANGUAGES[doc.lang].native }} · {{ doc.script }}</span>{% endif %}
+  {% if doc.ocr_engine %}<span class="chip subtle">OCR: {{ doc.ocr_engine }}</span>{% endif %}
+</div>
+{% if doc.status == 'done' %}
+<nav class="langs-switch" aria-label="Explanation language">
+  {% for code, l in LANGUAGES.items() %}
+  <a href="?lang={{ code }}" class="{{ 'active' if code == ui_lang }}">{{ l.native }}</a>
+  {% endfor %}
+</nav>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% set T = UI[ui_lang] %}
+{% if doc.status in ('queued', 'processing') %}
+<section class="processing" hx-ext="sse" sse-connect="/api/documents/{{ doc.id }}/events">
+  <h1>Reading your document…</h1>
+  <div id="stages" sse-swap="stage">
+    {% include "partials/stage.html" %}
+  </div>
+  <div hidden sse-swap="done,error" hx-swap="none"></div>
+</section>
+{% elif doc.status == 'error' %}
+<section class="processing">
+  <h1>Something went wrong</h1>
+  <p class="error">{{ doc.error }}</p>
+  <a class="btn" href="/">Try another document</a>
+</section>
+{% else %}
+<div class="workspace">
+  <section class="viewer" id="viewer" aria-label="Document image">
+    <div class="viewer-tools">
+      <label><input type="checkbox" id="show-boxes"> Show all text boxes</label>
+      <span class="hint">Click a point or a field to see where it comes from.</span>
+    </div>
+    {% for p in doc.pages %}
+    <div class="page" data-page="{{ p.index }}">
+      <img src="/{{ p.image }}" alt="Page {{ p.index + 1 }}" width="{{ p.width }}" height="{{ p.height }}" loading="lazy">
+      <svg viewBox="0 0 1 1" preserveAspectRatio="none" class="overlay"></svg>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="panel">
+    <div class="tabs" role="tablist">
+      <button role="tab" class="tab active" data-tab="t-explain">{{ T.explain }}</button>
+      <button role="tab" class="tab" data-tab="t-fields">{{ T.fields }}
+        {% set n_review = doc.fields | selectattr('needs_review') | list | length %}
+        {% if n_review %}<span class="count warn">{{ n_review }}</span>{% endif %}
+      </button>
+      <button role="tab" class="tab" data-tab="t-ask">{{ T.ask }}</button>
+    </div>
+
+    <div class="tabpane active" id="t-explain">
+      <div id="explanation"
+           hx-post="/api/documents/{{ doc.id }}/explain?lang={{ ui_lang }}"
+           hx-trigger="{{ 'fields-changed from:body' if explanation else 'load, fields-changed from:body' }}"
+           hx-indicator="#exp-ind">
+        {% if explanation %}{% include "partials/explanation.html" %}{% endif %}
+      </div>
+      <div id="exp-ind" class="htmx-indicator loading">Preparing explanation…</div>
+    </div>
+
+    <div class="tabpane" id="t-fields">
+      <div id="fields">{% include "partials/fields.html" %}</div>
+    </div>
+
+    <div class="tabpane" id="t-ask">
+      <div id="chat-log" class="chat-log">
+        {% with turns=turns, autoplay=False %}{% include "partials/chat_message.html" %}{% endwith %}
+      </div>
+      <form class="ask" hx-post="/api/documents/{{ doc.id }}/ask" hx-target="#chat-log" hx-swap="beforeend"
+            hx-indicator="#ask-ind" hx-on::after-request="if(event.detail.successful) this.reset()">
+        <input type="hidden" name="lang" value="{{ ui_lang }}">
+        <textarea name="question" rows="2" placeholder="{{ T.placeholder }}" required></textarea>
+        <div class="ask-row">
+          {% if settings().enable_voice %}
+          <button type="button" class="btn mic" id="mic" data-doc="{{ doc.id }}" data-lang="{{ ui_lang }}"
+                  data-label="{{ T.hold }}" data-stop="{{ T.stop }}">🎙 <span>{{ T.hold }}</span></button>
+          <label class="speak-toggle"><input type="checkbox" name="speak" value="true"> 🔊 {{ T.listen }}</label>
+          {% endif %}
+          <button class="btn primary" type="submit">{{ T.send }} <span id="ask-ind" class="htmx-indicator spinner"></span></button>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+<script id="blocks-data" type="application/json">{{ blocks_json | tojson }}</script>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if doc.status in ('queued', 'processing') %}
+<script>
+  document.body.addEventListener('htmx:sseMessage', e => {
+    if (e.detail.type === 'done' || e.detail.type === 'error') setTimeout(() => location.reload(), 600);
+  });
+</script>
+{% else %}
+<script src="/static/viewer.js"></script>
+<script src="/static/crops.js"></script>
+<script src="/static/recorder.js"></script>
+{% endif %}
+{% endblock %}

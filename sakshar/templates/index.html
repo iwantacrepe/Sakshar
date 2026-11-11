@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <h1>Understand your government documents</h1>
+  <p class="lead">Upload a photo or PDF of a land record (Khatauni, 7/12 Satbara, Jamabandi), an application form or a
+    certificate. Sakshar reads it, pulls out the key details, flags anything uncertain, and explains it in plain
+    language you can also listen to.</p>
+  <p class="lead langs">हिन्दी · मराठी · ਪੰਜਾਬੀ · English</p>
+
+  <form class="upload" hx-post="/api/documents" hx-encoding="multipart/form-data" hx-indicator="#up-ind">
+    <label class="drop" id="drop">
+      <input type="file" name="file" accept="image/*,.pdf" required id="file">
+      <span class="drop-title">Choose a file or drop it here</span>
+      <span class="drop-sub">JPG, PNG, TIFF or PDF · up to 20 MB</span>
+      <span class="drop-name" id="file-name"></span>
+    </label>
+    <div class="row">
+      <label for="lang">Explain in</label>
+      <select name="lang" id="lang">
+        <option value="auto">Same as document</option>
+        {% for code, l in LANGUAGES.items() %}<option value="{{ code }}">{{ l.native }} ({{ l.name }})</option>{% endfor %}
+      </select>
+      <button class="btn primary" type="submit">Read document <span id="up-ind" class="htmx-indicator spinner"></span></button>
+    </div>
+  </form>
+  {% if not settings().llm_enabled %}
+  <p class="warn">OPENAI_API_KEY is not set. OCR and field extraction will work, but explanations and Q&amp;A are disabled.</p>
+  {% endif %}
+</section>
+
+{% if docs %}
+<section class="recent">
+  <h2>Recent documents</h2>
+  <ul class="doc-list">
+    {% for d in docs %}
+    <li><a href="/doc/{{ d.id }}">
+      <span class="name">{{ d.filename }}</span>
+      <span class="meta">{{ (d.doc_type.value if d.doc_type else d.status) | replace('_', ' ') }}{% if d.lang %} · {{ LANGUAGES[d.lang].native }}{% endif %}</span>
+      <span class="badge {{ d.status }}">{{ d.status }}</span>
+    </a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  const f = document.getElementById('file'), drop = document.getElementById('drop');
+  f.addEventListener('change', () => document.getElementById('file-name').textContent = f.files[0]?.name || '');
+  ['dragover', 'dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(e => drop.addEventListener(e, () => drop.classList.remove('over')));
+  drop.addEventListener('drop', ev => { ev.preventDefault(); f.files = ev.dataTransfer.files; f.dispatchEvent(new Event('change')); });
+</script>
+{% endblock %}
