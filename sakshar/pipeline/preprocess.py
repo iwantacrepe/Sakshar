@@ -220,8 +220,99 @@ def find_vlines(binary: np.ndarray) -> list[tuple[float, float, float]]:
     return sorted(out)
 
 
+_ROT90 = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
+
+
+def _char_size(bw_inv: np.ndarray) -> int:
+    """Median glyph size (px) from connected components, ignoring specks and rules."""
+    n, _, stats, _ = cv2.connectedComponentsWithStats(bw_inv, connectivity=8)
+    sizes = [max(int(s[2]), int(s[3])) for s in stats[1:] if s[4] >= 12 and 4 <= max(s[2], s[3]) <= 80]
+    return int(np.median(sizes)) if sizes else 12
+
+
+def _text_line_blobs(bw_inv: np.ndarray, horizontal: bool, char: int | None = None) -> int:
+    """Count text-line-shaped blobs after smearing along one direction.
+
+    Smearing upright text horizontally merges words into long, text-height bands; smearing it
+    vertically does not (and vice versa for a sideways page). The smear spans ~one glyph, enough
+    to bridge letter and word gaps but not the larger gap between lines. Ruling lines are
+    excluded by their thickness, so tables don't bias the vote."""
+    k = max(5, int(1.0 * (char or _char_size(bw_inv))))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k, 1) if horizontal else (1, k))
+    smeared = cv2.dilate(bw_inv, kernel)
+    n, _, stats, _ = cv2.connectedComponentsWithStats(smeared, connectivity=8)
+    count = 0
+    for x, y, bw_, bh, area in stats[1:]:
+        along, across = (bw_, bh) if horizontal else (bh, bw_)
+        if 6 <= across <= 60 and along >= 4 * across and area >= 0.3 * along * across:
+            count += 1
+    return count
+
+
+def _word_box_vote(gray: np.ndarray, pt, langs: str) -> tuple[int, int]:
+    """(wide, tall) counts of confident OCR word boxes. Tesseract finds vertical text lines on a
+    sideways page, and their word boxes are taller than wide."""
+    data = pt.image_to_data(gray, lang=langs, config="--psm 3 --oem 1", output_type=pt.Output.DICT)
+    wide = tall = 0
+    for t, c, bw_, bh in zip(data["text"], data["conf"], data["width"], data["height"]):
+        if len(t.strip()) >= 2 and float(c) >= 50:
+            if bw_ >= bh:
+                wide += 1
+            elif bh > 1.2 * bw_:
+                tall += 1
+    return wide, tall
+
+
+def _read_score(gray: np.ndarray, pt, langs: str) -> float:
+    """Sum of confident word lengths in a quick OCR pass: high when the page is the right way up."""
+    data = pt.image_to_data(gray, lang=langs, config="--psm 6 --oem 1", output_type=pt.Output.DICT)
+    return float(sum(len(t.strip()) for t, c in zip(data["text"], data["conf"])
+                     if t.strip() and float(c) >= 60 and len(t.strip()) >= 2))
+
+
+def fix_orientation(rgb: np.ndarray) -> tuple[np.ndarray, int]:
+    """Undo 90/180/270-degree page rotation (sideways scans, upside-down photos).
+
+    Tesseract's orientation detector (OSD) proved unreliable on Indic pages, and plain OCR cannot
+    tell sideways from upright (Tesseract happily reads vertical text lines). So:
+    1. sideways vs upright from geometry: which smearing direction turns the page into text lines;
+    2. which way up, from OCR: upside-down text reads badly, so of the two remaining candidates
+       the one with more confident text wins. Upright pages cost no OCR pass at all.
+    Fine skew (< 20 degrees) is handled afterwards by deskew(). Returns (image, degrees rotated clockwise).
+    """
+    try:
+        from .tess import lang_string, pytesseract_mod
+
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        h, w = gray.shape
+        s = min(1.0, 1200 / max(h, w))
+        small = cv2.resize(gray, (int(w * s), int(h * s)), interpolation=cv2.INTER_AREA) if s < 1 else gray
+        bw = 255 - cv2.adaptiveThreshold(small, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 25, 15)
+        char = _char_size(bw)
+        horiz, vert = _text_line_blobs(bw, True, char), _text_line_blobs(bw, False, char)
+        if vert < 0.67 * horiz or max(horiz, vert) < 4:
+            return rgb, 0  # clearly upright (180-degree pages are rare and left alone)
+        pt = pytesseract_mod()
+        langs = lang_string(["hin", "pan", "eng"])
+        if pt is None or not langs:
+            return rgb, 0
+        # Not clearly upright: read the page at 0, 90 and 270 degrees and keep the orientation that
+        # yields the most confident, normally shaped (wider-than-tall) words, i.e. the one that reads.
+        scores = {}
+        for deg in (0, 90, 270):
+            img = small if deg == 0 else cv2.rotate(small, _ROT90[deg])
+            scores[deg] = _word_box_vote(img, pt, langs)[0]
+        best = max(scores, key=scores.get)
+        if best != 0 and scores[best] > 1.25 * scores[0] + 3:
+            return cv2.rotate(rgb, _ROT90[best]), best
+    except Exception:
+        pass  # leave the page as it is
+    return rgb, 0
+
+
 def prepare_page(rgb: np.ndarray, index: int = 0) -> PreparedPage:
     rgb = _resize(rgb)
+    rgb, _ = fix_orientation(rgb)
     deskewed, skew = deskew(rgb)
     binary = make_binary(deskewed)
     return PreparedPage(

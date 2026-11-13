@@ -101,6 +101,29 @@ def test_user_correction_renormalizes_value():
     assert v.normalized == "0.632 hectare" and not v.needs_review
 
 
+def test_sideways_page_is_turned_upright():
+    """Real scans often arrive rotated 90 degrees (UP Bhulekh khatauni printouts were); deskew only fixes < 20."""
+    from pathlib import Path
+
+    import cv2
+    import numpy as np
+    import pytest
+
+    from sakshar.pipeline import preprocess
+    from sakshar.pipeline.tess import pytesseract_mod
+
+    if pytesseract_mod() is None:
+        pytest.skip("Tesseract not installed")
+    sample = Path(__file__).resolve().parent.parent / "samples" / "hi_khatauni.png"
+    img = preprocess._resize(preprocess.load_pages(sample)[0])
+    small = lambda a: cv2.resize(cv2.cvtColor(a, cv2.COLOR_RGB2GRAY), (100, 125)).ravel()
+    for code in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE):
+        fixed, deg = preprocess.fix_orientation(cv2.rotate(img, code))
+        assert deg in (90, 270) and fixed.shape == img.shape
+        assert np.corrcoef(small(fixed), small(img))[0, 1] > 0.9
+    assert preprocess.fix_orientation(img)[1] == 0  # upright pages are left alone
+
+
 def test_area_conventions():
     from sakshar.pipeline.schemas import v_area
 

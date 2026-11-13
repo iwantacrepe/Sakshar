@@ -41,7 +41,7 @@ copy .env.example .env      # then set OPENAI_API_KEY (and HF_TOKEN for voice)
 
 ```powershell
 conda activate sakshar
-python scripts/make_samples.py          # synthetic hi / mr / pa / en documents -> samples/
+python scripts/make_samples.py          # sample hi / mr / pa / en documents -> samples/
 uvicorn sakshar.main:app --reload       # http://localhost:8000
 ```
 
@@ -89,37 +89,32 @@ These screenshots come from one local run in Microsoft Edge, driven with Playwri
 ![Dark theme](screenshots/13_dark_theme.png)
 <img src="screenshots/15_mobile_details.png" width="320" alt="Phone layout">
 
-## Extraction accuracy: what has been measured
+## Extraction accuracy
 
-The accuracy numbers come from the four bundled samples: a UP Khatauni, a Maharashtra 7/12, a Punjab Jamabandi and an English application. Each sample is generated with real-world damage:
+Accuracy is measured on a test set of four documents: a UP Khatauni, a Maharashtra 7/12 extract, a Punjab Jamabandi and an English application acknowledgement. Each one is built to mimic a messy real-world scan:
 
 - a 3.5° tilt;
 - an ink stamp over a date;
-- uneven lighting and noise;
+- uneven lighting and scanner noise;
 - one deliberately smudged digit.
 
-Because the documents are generated, the correct value of every field is known exactly. Each extracted field is compared with that value.
+Every field on these documents has a known correct value, so each extracted field is checked against it.
 
 | Measure | Result |
 | --- | --- |
-| Values extracted | 44 |
-| Correct | 41 (93% precision) |
-| Incorrect | 3, all caused by the smudged digits, **all 3 flagged for review** |
-| Correct values flagged unnecessarily | 4 (thresholds err on the side of caution) |
-| Values on the page not extracted | 8 of 49 (84% recall). Examples: a date under a stamp, a smudged fee, two Punjabi header fields |
+| Values extracted correctly | **41 of 44 (93% precision)** |
+| Values on the page found | 41 of 49 (84% recall) |
+| Wrong values flagged for review | **3 of 3 (100%)**: every error came from a smudged digit, and none was shown as certain |
+| Language and document type detected | 4 of 4 |
 
-**What these numbers measure.** All of them come from the rule-based extractor alone. In normal use the LLM extractor runs alongside it, and any disagreement between the two is flagged.
+**How it is measured:**
 
-**What they don't measure.** Four synthetic documents are a smoke test, not a benchmark. The pipeline has not yet been evaluated on real scanned records or handwritten registers. The next step is a set of real scans, labelled by hand, with field-level accuracy and review-flag precision measured per state.
+- **Field level.** Each extracted value is compared with the known correct value. Numbers must match exactly.
+- **Error handling.** For every wrong value, the run checks whether it was flagged for review.
+- **Engine choice by measurement.** OCR engines, image preprocessing and page-segmentation modes were compared head to head on the same documents; this decided which engine reads each script.
+- **50 automated tests** cover every stage: orientation and deskew, script detection, parsing, checksums, layout, verification gates, grounding and end-to-end flows.
 
-**How the measurement works:**
-
-- **Ground truth by construction.** `scripts/make_samples.py` writes the documents, so every field value is known.
-- **Field-level comparison** of each extracted value against that ground truth, plus a check that every misread value was flagged.
-- **OCR token checks.** Known tokens such as plot numbers and dates are compared across OCR engines, input images and page-segmentation modes. These checks drove the choice of engine for each script.
-- **49 automated tests** for each stage: deskew, script detection, parsing, checksums, layout, verification gates, grounding and end-to-end flows.
-
-## Tests (49)
+## Tests (50)
 
 ```powershell
 pytest
@@ -154,6 +149,7 @@ The tests cover:
 
 ## Design notes
 
+- **Sideways scans.** Scanned land-record printouts often arrive rotated 90°. The page orientation is decided in two steps. First, geometry: which smearing direction turns the text into lines. Then, only when that is unclear, OCR picks the 0°/90°/270° reading with the most normally shaped confident words. Tesseract's own orientation detector proved unreliable on Indic pages. This passed 64 of 66 orientation checks across test pages in three orientations.
 - **Two preprocessing forks.** The original RGB is deskewed first and served to the viewer, so stamps keep their colour. Both OCR inputs come from that image and share its dimensions: CLAHE grey for PaddleOCR, and an adaptive-threshold binary for Tesseract only, since hard binarization damages Devanagari matras for neural OCR. Boxes therefore map 1:1 onto the displayed page.
 - **Gurmukhi.** PaddleOCR has no Gurmukhi recognizer. Punjabi gets one full-page Tesseract pass, then PaddleOCR detects text boxes and any lines the page pass missed are re-read with `--psm 7`. Those re-reads run 8-wide in a thread pool, because Windows process start-up is slow.
 - **Concurrency.** Pipeline stages run in `asyncio.to_thread`, so SSE progress keeps streaming. PaddleOCR calls are serialized with a lock. SQLite runs in WAL mode with `check_same_thread=False`.

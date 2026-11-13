@@ -6,6 +6,9 @@
 # runtime state: uploads, page images, TTS cache, SQLite database
 data/
 
+# local evaluation data (never committed)
+eval_real/
+
 # Python / tooling
 __pycache__/
 *.py[cod]
